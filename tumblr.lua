@@ -12,7 +12,6 @@ local url_count = 0
 local tries = 0
 local downloaded = {}
 local addedtolist = {}
-local ignored = {}
 local abortgrab = false
 
 -- Tumblr seem to be using epoch time on the /archive endpoint
@@ -26,7 +25,6 @@ local discovered_blogs = {}
 
 for ignore in io.open("ignore-list", "r"):lines() do
   downloaded[ignore] = true
-  ignored[ignore] = true
 end
 
 read_file = function(file)
@@ -64,7 +62,8 @@ allowed = function(url, parenturl)
   or string.match(url, "^https?://" .. item_value .. "%.tumblr%.com/.*/amp$")
   or string.match(url, "^https?://" .. item_value .. "%.tumblr%.com/rss$")
   or string.match(url, "^https?://" .. item_value .. "%.tumblr%.com/reblog")
-  or string.match(url, "^https?://" .. item_value .. "%.tumblr%.com/.*%?route=") then
+  or string.match(url, "^https?://" .. item_value .. "%.tumblr%.com/.*%?route=")
+  or string.match(url, "^https?://" .. item_value .. "%.tumblr%.com/[^/]+%%") then
     return false
   end
 
@@ -119,12 +118,18 @@ wget.callbacks.download_child_p = function(urlpos, parent, depth, start_url_pars
   local url = urlpos["url"]["url"]
   local html = urlpos["link_expect_html"]
   
-  if string.find(url, "px.srvcs.tumblr.com") then
-    -- Ignore px.srvcs.tumblr.com tracking domain
+  if string.find(url, "code%.jquery%.com") then
+    -- Ignore code.jquery.com
     return false
   end
-
-  if ignored[url] ~= true then
+  
+  if string.find(url, "fonts%.googleapis%.com") then
+    -- Ignore fonts.googleapis.com
+    return false
+  end
+  
+  if string.find(url, "px.srvcs.tumblr.com") then
+    -- Ignore px.srvcs.tumblr.com tracking domain
     return false
   end
 
