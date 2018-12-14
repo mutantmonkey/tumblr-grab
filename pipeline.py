@@ -59,7 +59,7 @@ if not WGET_LUA:
 # Update this each time you make a non-cosmetic change.
 # It will be added to the WARC files and reported to the tracker.
 
-VERSION = '20181213.02'
+VERSION = '20181213.04'
 USER_AGENT = 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html; ArchiveTeam)'
 TRACKER_ID = 'tumblr'
 TRACKER_HOST = 'tracker.archiveteam.org'
@@ -225,7 +225,7 @@ project = Project(
     title = 'Tumblr',
     project_html = '''
     <img class="project-logo" alt="logo" src="https://archiveteam.org/images/b/ba/Tumblr_on_white.png" height="50px"/>
-    <h2>Tumblr <span class="links"><a href="http://www.tumblr.com/">Website</a> &middot; <a href="http://tracker.archiveteam.org/tumblr/">Leaderboard</a></span></h2>
+    <h2>Tumblr <span class="links"><a href="https://www.tumblr.com/">Website</a> &middot; <a href="https://tracker.archiveteam.org/tumblr/">Leaderboard</a></span></h2>
     '''
 )
 
