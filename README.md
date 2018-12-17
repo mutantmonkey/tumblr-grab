@@ -3,6 +3,8 @@ tumblr-grab
 
 More information about the archiving project can be found on the ArchiveTeam wiki: [tumblr](http://archiveteam.org/index.php?title=tumblr)
 
+[Frequently Asked Questions](FAQ.md)
+
 Setup instructions
 =========================
 
@@ -108,6 +110,15 @@ Ensure that you have the Arch equivalent of bzip2 installed as well.
 4. Modify the run-pipeline script in seesaw to point at `#!/usr/bin/python2` instead of `#!/usr/bin/python`.
 5. `useradd --system --group users --shell /bin/bash --create-home archiveteam`
 6. `screen su -c "cd /home/archiveteam/tumblr-grab/; run-pipeline pipeline.py --concurrent 2 --address '127.0.0.1' YOURNICKHERE" archiveteam`
+
+### For Alpine Linux:
+
+    apk add lua5.1 git python-dev bzip2 bash rsync gcc libc-dev lua5.1-dev gnutls-dev autoconf flex make
+    python -m ensurepip
+    pip install -U seesaw
+    git clone https://github.com/ArchiveTeam/tumblr-grab
+    cd tumblr-grab; ./get-wget-lua.sh
+    run-pipeline pipeline.py --concurrent 2 --address '127.0.0.1' YOURNICKHERE
 
 ### For FreeBSD:
 

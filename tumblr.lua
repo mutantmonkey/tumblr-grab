@@ -23,6 +23,8 @@ local video = "^https?://www%.tumblr%.com/video/".. item_value .. "/?.*/?.*/?.*"
 
 local discovered_blogs = {}
 
+local media_file = io.open(item_dir..'/'..warc_file_base..'_media.txt', 'w')
+
 for ignore in io.open("ignore-list", "r"):lines() do
   downloaded[ignore] = true
 end
@@ -36,6 +38,39 @@ read_file = function(file)
   else
     return ""
   end
+end
+
+should_add_media = function(url, parenturl)
+  if string.match(url, video) 
+  or string.match(url, "vtt%.tumblr%.com")
+  then
+    return true
+  end
+  
+  if string.match(url, "^https?://assets%.tumblr%.com")
+  or string.match(url, "^https?://static%.tumblr%.com")
+  or string.match(url, "^https?://[0-9]+%.media%.tumblr%.com")
+  then
+    if parenturl ~= nil then
+      if string.match(parenturl, concat) then
+        return true
+      end
+    else
+      return true
+    end
+  end
+  
+  if string.match(url, "^https?://[a-z]+%.media%.tumblr%.com") then
+    if parenturl ~= nil then
+      if string.match(parenturl, "^https?://www%.tumblr%.com") then
+        return true
+      end
+    else
+      return true
+    end
+  end
+  
+  return false
 end
 
 allowed = function(url, parenturl)
@@ -59,11 +94,23 @@ allowed = function(url, parenturl)
   or string.match(url, "^https?://" .. item_value .. "%.tumblr%.com/notes")
   or string.match(url, "^https?://" .. item_value .. "%.tumblr%.com/post/%d+/[^/]+/amp$")
   or string.match(url, "^https?://" .. item_value .. "%.tumblr%.com/post/%d+/[^/]+/embed$")
+  or string.match(url, "^https?://" .. item_value .. "%.tumblr%.com/post/%d+/embed$")
   or string.match(url, "^https?://" .. item_value .. "%.tumblr%.com/rss$")
   or string.match(url, "^https?://" .. item_value .. "%.tumblr%.com/reblog")
   or string.match(url, "^https?://" .. item_value .. "%.tumblr%.com/.*%?route=")
  -- or string.match(url, "^https?://" .. item_value .. "%.tumblr%.com/likes/page/%d%d%d")
-  or string.match(url, "^https?://" .. item_value .. "%.tumblr%.com/[^/]+%%") then
+  or string.match(url, "^https?://" .. item_value .. "%.tumblr%.com/[^/]+%%")
+  --[[
+  exclude /: template urls when discovering urls because for some reason wget-lua 
+  does not properly call download_child(_p) when deciding whether to download these
+  ]]
+  or string.find(url, "/:year")
+  or string.find(url, "/:month")
+  or string.find(url, "/:id")
+  or string.find(url, "/:page")
+  or string.find(url, "/:blog_not_found")
+  or string.find(url, "/:tag")
+  then
     return false
   end
 
@@ -85,30 +132,9 @@ allowed = function(url, parenturl)
     return true
   end
   
-  if string.match(url, video) then
-    return true
-  end
-  
-  if string.match(url, "^https?://assets%.tumblr%.com")
-  or string.match(url, "^https?://static%.tumblr%.com")
-  or string.match(url, "^https?://[0-9]+%.media%.tumblr%.com") then
-    if parenturl ~= nil then
-      if string.match(parenturl, concat) then
-        return true
-      end
-    else
-      return true
-    end
-  end
-  
-  if string.match(url, "^https?://[a-z]+%.media%.tumblr%.com") then
-    if parenturl ~= nil then
-      if string.match(parenturl, "^https?://www%.tumblr%.com") then
-        return true
-      end
-    else
-      return true
-    end
+  if should_add_media(url, parenturl) then
+    media_file:write(url .. "\n")
+    return false
   end
   
   return false
@@ -133,11 +159,12 @@ wget.callbacks.download_child_p = function(urlpos, parent, depth, start_url_pars
     return false
   end
 
-  if string.find(url, "/:year") or 
-    string.find(url, "/:month") or 
-    string.find(url, "/:id") or 
-    string.find(url, "/:page") or 
-    string.find(url, "/:blog_not_found")
+  if string.find(url, "/:year")
+  or string.find(url, "/:month")
+  or string.find(url, "/:id")
+  or string.find(url, "/:page")
+  or string.find(url, "/:blog_not_found")
+  or string.find(url, "/:tag")
   then 
     return false
   end
@@ -150,7 +177,13 @@ wget.callbacks.download_child_p = function(urlpos, parent, depth, start_url_pars
   end
   
   if (downloaded[url] ~= true and addedtolist[url] ~= true)
-  and (allowed(url, parent["url"]) or html == 0) then
+  and (allowed(url, parent["url"]) or html == 0)
+  then
+    if should_add_media(url, parent["url"]) then
+      -- already added to media list in allowed, don't need to add it again,
+      -- but must return false here
+      return false
+    end
     addedtolist[url] = true
     return true
   end
@@ -161,7 +194,7 @@ end
 wget.callbacks.get_urls = function(file, url, is_css, iri)
   local urls = {}
   local html = nil
-
+  
   downloaded[url] = true
   local function check(urla)
     local origurl = url
@@ -204,8 +237,14 @@ wget.callbacks.get_urls = function(file, url, is_css, iri)
       check(string.match(url, "^(https?://.+/)")..newurl)
     end
   end
-  if allowed(url, nil) then
+  if not (string.match(url, "^https?://[0-9a-z]+%.media%.tumblr%.com")
+          or string.match(url, "^https?://vtt%.tumblr%.com"))
+  and allowed(url, nil) then
     html = read_file(file)
+    if string.match(html, '<title>Request denied%.</title>') then
+      abortgrab = true
+      return urls
+    end
     for newurl in string.gmatch(html, '([^"]+)') do
       checknewurl(newurl)
     end
@@ -236,6 +275,14 @@ wget.callbacks.httploop_result = function(url, err, http_stat)
   io.stdout:write(url_count .. "=" .. status_code .. " " .. url["url"] .. "  \n")
   io.stdout:flush()
 
+  if (status_code >= 300 and status_code <= 399) then
+    local newloc = http_stat["newloc"]
+    if string.match(newloc, "https?://www%.tumblr%.com/privacy/consent")
+    or string.match(newloc, "https?://www%.tumblr%.com/safe-mode") then
+      abortgrab = true
+    end
+  end
+  
   if (status_code >= 200 and status_code <= 399) then
     downloaded[url["url"]] = true
     downloaded[string.gsub(url["url"], "https?://", "http://")] = true
@@ -246,20 +293,26 @@ wget.callbacks.httploop_result = function(url, err, http_stat)
     return wget.actions.ABORT
   end
   
-  if status_code >= 500 or
-    (status_code > 400 and status_code < 403 and status_code ~= 404)
-    or status_code > 404 then
+  if status_code >= 500
+  or (status_code > 400 and status_code < 403 and status_code ~= 404)
+  or status_code > 404
+  then
     io.stdout:write("Server returned "..http_stat.statcode.." ("..err.."). Sleeping.\n")
     io.stdout:flush()
-    os.execute("sleep 60")
-    tries = tries + 1
-    if tries >= 5 then
+    local maxtries = 10 -- default: bail out after 10 retires or 2047 seconds (2^11 or 1+2+4+8+16+32+64+128+256+512+1024)
+    if string.match(url["url"], "_%d+.[pjg][npi][ggf]$")
+    or string.match(url["url"], "%.[pjg][npi][ggf]$")
+    then
+      maxtries = 8 -- we don't care that much about errors on media urls and skip those earlier: after 255 seconds (2^8 or 1+2+4+8+16+32+64+128)
+    end
+    if tries > maxtries then
       io.stdout:write("\nI give up...\n")
       io.stdout:flush()
       tries = 0
       if string.match(url["url"], "_%d+.[pjg][npi][ggf]$")
-      or string.match(url["url"], "%.[pjg][npi][ggf]$") then
-        return wget.actions.EXIT
+      or string.match(url["url"], "%.[pjg][npi][ggf]$")
+      then
+        return wget.actions.EXIT -- just skip this url instead of aborting the entire item when we hit a bad media url
       end
       if allowed(url["url"], nil) then
         return wget.actions.ABORT
@@ -267,11 +320,18 @@ wget.callbacks.httploop_result = function(url, err, http_stat)
         return wget.actions.EXIT
       end
     else
+      local backoff = math.floor(math.pow(2, tries)) -- math.pow returns a float, math.floor turns it into an int so the sleep cmd gets an int
+      os.execute("sleep " .. backoff)
+      tries = tries + 1
       return wget.actions.CONTINUE
     end
   end
   
-  if status_code == 403 or status_code == 400 or status_code == 0 then
+  if status_code == 403 -- banned
+  or status_code == 400 -- ?
+  or status_code == 429 -- rate limit exceeded
+  or status_code == 0 -- download error
+  then
     --if string.match(url["host"], "")
     if string.match(url["host"], "assets%.tumblr%.com")
     or string.match(url["host"], "static%.tumblr%.com")
@@ -287,9 +347,7 @@ wget.callbacks.httploop_result = function(url, err, http_stat)
     else
       io.stdout:write("Server returned " ..http_stat.statcode.." ("..err.."). Sleeping.\n")
       io.stdout:flush()
-      os.execute("sleep 1")
-      tries = tries + 1
-      if tries >= 5 then
+      if tries > 10 then -- bail out after 10 retries or 2047 seconds (2^11 or 1+2+4+8+16+32+64+128+256+512+1024)
         io.stdout:write("\nI give up...\n")
         io.stdout:flush()
         tries = 0
@@ -299,6 +357,9 @@ wget.callbacks.httploop_result = function(url, err, http_stat)
           return wget.actions.EXIT
         end
       else
+        local backoff = math.floor(math.pow(2, tries)) -- math.pow returns a float, math.floor turns it into an int so the sleep cmd gets an int
+        os.execute("sleep " .. backoff)
+        tries = tries + 1
         return wget.actions.CONTINUE
       end
     end
@@ -323,6 +384,7 @@ wget.callbacks.finish = function(start_time, end_time, wall_time, numurls, total
     end
   end
   file:close()
+  media_file:close()
 end
 
 wget.callbacks.before_exit = function(exit_status, exit_status_string)

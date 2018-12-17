@@ -22,7 +22,8 @@ from seesaw.externalprocess import WgetDownload
 from seesaw.pipeline import Pipeline
 from seesaw.project import Project
 from seesaw.util import find_executable
-
+from random import shuffle
+import json
 
 # check the seesaw version
 if StrictVersion(seesaw.__version__) < StrictVersion('0.8.5'):
@@ -59,11 +60,13 @@ if not WGET_LUA:
 # Update this each time you make a non-cosmetic change.
 # It will be added to the WARC files and reported to the tracker.
 
-VERSION = '20181215.01'
-USER_AGENT = 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)'
+VERSION = '20181217.04'
+#USER_AGENT = 'Mozilla/5.0 (X11; Linux x86_64; rv:60.0) Gecko/20100101 Firefox/60.0'
 TRACKER_ID = 'tumblr'
 TRACKER_HOST = 'tracker.archiveteam.org'
 
+with open('cookies.json') as f:
+    COOKIES = json.load(f)
 
 ###########################################################################
 # This section defines project-specific tasks.
@@ -125,6 +128,7 @@ class PrepareDirectories(SimpleTask):
 
         open('%(item_dir)s/%(warc_file_base)s.warc.gz' % item, 'w').close()
         open('%(item_dir)s/%(warc_file_base)s_data.txt' % item, 'w').close()
+        open('%(item_dir)s/%(warc_file_base)s_media.txt' % item, 'w').close()
 
 
 class MoveFiles(SimpleTask):
@@ -140,6 +144,8 @@ class MoveFiles(SimpleTask):
               '%(data_dir)s/%(warc_file_base)s.warc.gz' % item)
         os.rename('%(item_dir)s/%(warc_file_base)s_data.txt' % item,
               '%(data_dir)s/%(warc_file_base)s_data.txt' % item)
+        os.rename('%(item_dir)s/%(warc_file_base)s_media.txt' % item,
+              '%(data_dir)s/%(warc_file_base)s_media.txt' % item)
 
         shutil.rmtree('%(item_dir)s' % item)
 
@@ -165,11 +171,13 @@ def stats_id_function(item):
 
 class WgetArgs(object):
     def realize(self, item):
+        shuffle(COOKIES)
+        COOKIE = COOKIES[0]
         wget_args = [
             WGET_LUA,
-            '-U', USER_AGENT,
+            '-U', COOKIE['uax'],
             '-nv',
-            '--no-cookies',
+            '--header', 'Cookie: pfx={}; pfg={}'.format(COOKIE['pfx'], COOKIE['pfg']),
             '--lua-script', 'tumblr.lua',
             '-o', ItemInterpolation('%(item_dir)s/wget.log'),
             '--no-check-certificate',
@@ -264,6 +272,7 @@ pipeline = Pipeline(
             version=VERSION,
             files=[
                 ItemInterpolation('%(data_dir)s/%(warc_file_base)s_data.txt'),
+                ItemInterpolation('%(data_dir)s/%(warc_file_base)s_media.txt'),
                 ItemInterpolation('%(data_dir)s/%(warc_file_base)s.warc.gz')
             ],
             rsync_target_source_path=ItemInterpolation('%(data_dir)s/'),
